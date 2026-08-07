@@ -38,6 +38,22 @@ public partial class ExcelHandler
             $"Unknown totals-row function '{tok}'. Valid: sum, average, count, countNums, max, min, stdDev, var, none, custom.")
     };
 
+    private List<string>? _sharedStringCache;
+
+    private List<string> GetSharedStringCache()
+    {
+        if (_sharedStringCache != null) return _sharedStringCache;
+        var sst = _doc.WorkbookPart?.GetPartsOfType<SharedStringTablePart>().FirstOrDefault();
+        if (sst?.SharedStringTable == null) return _sharedStringCache = new List<string>();
+
+        var list = new List<string>();
+        foreach (var item in sst.SharedStringTable.Elements<SharedStringItem>())
+        {
+            list.Add(item.InnerText ?? "");
+        }
+        return _sharedStringCache = list;
+    }
+
     private string GetCellDisplayValue(Cell cell, Core.FormulaEvaluator? evaluator = null)
     {
         if (cell.DataType?.Value == CellValues.InlineString)
@@ -49,12 +65,13 @@ public partial class ExcelHandler
 
         if (cell.DataType?.Value == CellValues.SharedString)
         {
-            var sst = _doc.WorkbookPart?.GetPartsOfType<SharedStringTablePart>().FirstOrDefault();
-            if (sst?.SharedStringTable != null && int.TryParse(value, out int idx))
+            if (int.TryParse(value, out int idx))
             {
-                var item = sst.SharedStringTable.Elements<SharedStringItem>().ElementAtOrDefault(idx);
-                return item?.InnerText ?? value;
+                var cache = GetSharedStringCache();
+                if (idx >= 0 && idx < cache.Count)
+                    return cache[idx];
             }
+            return value;
         }
 
         // Boolean cells store 0/1 in <v> per the OOXML spec, but Excel displays
